@@ -1,5 +1,3 @@
-
-
 import requests
 import sqlite3
 from database_setup import init_db, get_table_counts
