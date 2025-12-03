@@ -4,13 +4,11 @@ import requests
 import sqlite3
 from database_setup import init_db, get_table_counts
 
-# ============================================
-# CONFIGURATION
-# ============================================
-API_KEY = "u0vFVXgpsddy1j2vde7XyLz7W5TrbEEfaYHsswt6"  # Get from https://api.data.gov/signup/
+
+API_KEY = "u0vFVXgpsddy1j2vde7XyLz7W5TrbEEfaYHsswt6"  #from https://api.data.gov/signup/
 BASE_URL = "https://api.data.gov/ed/collegescorecard/v1/schools"
 DATABASE_NAME = "project.db"
-MAX_INSERT_PER_RUN = 25  # CRITICAL: Do not change this!
+MAX_INSERT_PER_RUN = 25  
 
 
 def fetch_college_page(api_key, page, per_page=100):
@@ -98,8 +96,7 @@ def store_college_page(conn, college_list):
         if inserted_count >= MAX_INSERT_PER_RUN:
             print(f"Reached {MAX_INSERT_PER_RUN} insertions limit for this run.")
             break
-        
-        # college ID
+
         college_id = college.get("id")
         if college_id is None:
             continue
@@ -110,7 +107,7 @@ def store_college_page(conn, college_list):
            
             continue
         
-        # ---- Extract all fields with safe defaults for missing data ----
+       
         name = college.get("school.name", "Unknown")
         city = college.get("school.city")
         state = college.get("school.state")
@@ -127,7 +124,7 @@ def store_college_page(conn, college_list):
         completion_rate = college.get("latest.completion.rate_suppressed.overall")
         earnings_10yr = college.get("latest.earnings.10_yrs_after_entry.working_not_enrolled.mean_earnings")
         
-        # ---- Insert into us_colleges table ----
+       
         cur.execute('''
             INSERT INTO us_colleges 
             (id, name, city, state, zip, ownership, predominant_degree, lat, lon, student_size)
@@ -135,8 +132,7 @@ def store_college_page(conn, college_list):
         ''', (college_id, name, city, state, zip_code, ownership, 
               predominant_degree, lat, lon, student_size))
         
-        # ---- Insert into college_financials table ----
-        # This uses the SAME id, creating the shared key relationship
+       
         cur.execute('''
             INSERT INTO college_financials
             (id, in_state_tuition, out_state_tuition, academic_year_cost, completion_rate, earnings_10yr)
@@ -160,38 +156,22 @@ def get_next_page_to_fetch(conn):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM us_colleges")
     current_count = cur.fetchone()[0]
-    
-    # We fetch 100 per API call, so page number = count // 100
-    # But we only store 25 per run, so we need to be smarter
-    # Actually, let's just track by checking the max ID or counting
-    
-    # Simple approach: fetch the same large page and let store_college_page
-    # handle skipping duplicates
+
     return current_count // 100
 
 
 def main():
-    """
-    Main execution function.
-    
-    WORKFLOW:
-    1. Connect to database
-    2. Check current progress
-    3. Fetch data from API
-    4. Store up to 25 new records
-    5. Report final status
-    """
-    # Connect to database (creates it if doesn't exist)
+ 
     conn = init_db(DATABASE_NAME)
     
-    # Show current status
+    
     print("=== BEFORE DATA COLLECTION ===")
     get_table_counts(conn)
     
-    # Determine which page to fetch
+   
     page = get_next_page_to_fetch(conn)
     
-    # Fetch data from API
+    
     colleges = fetch_college_page(API_KEY, page=page, per_page=100)
     
     if not colleges:
@@ -199,14 +179,14 @@ def main():
         conn.close()
         return
     
-    # Store data (will automatically limit to 25)
+    
     inserted = store_college_page(conn, colleges)
     
-    # Show final status
+    
     print("\n=== AFTER DATA COLLECTION ===")
     get_table_counts(conn)
     
-    # Check if we've reached our goal
+   
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM us_colleges")
     total = cur.fetchone()[0]
@@ -214,7 +194,7 @@ def main():
     if total >= 100:
         print("✓ SUCCESS: You have collected 100+ colleges!")
     else:
-        runs_remaining = (100 - total + 24) // 25  # Ceiling division
+        runs_remaining = (100 - total + 24) // 25  
         print(f"Progress: {total}/100 colleges. Run this script {runs_remaining} more time(s).")
     
     conn.close()
