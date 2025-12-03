@@ -36,6 +36,59 @@ def calculate_state_level_stats(conn):
     
     return [dict(zip(columns, row)) for row in results]
 
+def calculate_country_uni_counts(conn):
+    """
+    Parker's function: Count universities per country.
+    """
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT country, COUNT(*) as university_count
+        FROM universities_world
+        GROUP BY country
+        ORDER BY university_count DESC
+    """)
+    
+    results = cur.fetchall()
+    return [{'country': row[0], 'count': row[1]} for row in results]
+
+
+def calculate_correlations(conn):
+    """
+    Additional calculation: Compute correlations between variables.
+    """
+    cur = conn.cursor()
+    
+    # Get data for correlation analysis
+    cur.execute("""
+        SELECT cf.in_state_tuition, cf.completion_rate, cf.earnings_10yr
+        FROM college_financials cf
+        WHERE cf.in_state_tuition IS NOT NULL 
+          AND cf.completion_rate IS NOT NULL
+          AND cf.earnings_10yr IS NOT NULL
+    """)
+    
+    data = cur.fetchall()
+    
+    if len(data) < 3:
+        return {}
+    
+    tuitions = [row[0] for row in data]
+    completions = [row[1] for row in data]
+    earnings = [row[2] for row in data]
+    
+    # Calculate Pearson correlations
+    corr_tuition_completion = np.corrcoef(tuitions, completions)[0, 1]
+    corr_tuition_earnings = np.corrcoef(tuitions, earnings)[0, 1]
+    corr_completion_earnings = np.corrcoef(completions, earnings)[0, 1]
+    
+    return {
+        'tuition_vs_completion': corr_tuition_completion,
+        'tuition_vs_earnings': corr_tuition_earnings,
+        'completion_vs_earnings': corr_completion_earnings
+    }
+
+
 def plot_state_tuition(state_stats, filename='visualizations/state_tuition.png'):
     """
     Alexia's visualization: Bar chart of average tuition by state.
@@ -106,57 +159,40 @@ def plot_tuition_vs_completion(conn, filename='visualizations/tuition_vs_complet
     plt.close()
     print(f"Saved: {filename}")
 
-def calculate_country_uni_counts(conn):
+def plot_universities_per_country(country_counts, filename='visualizations/universities_per_country.png'):
     """
-    Parker's function: Count universities per country.
+    Parker's visualization: Bar chart of universities per country.
     """
-    cur = conn.cursor()
+    # Take top 10 countries
+    top_countries = country_counts[:10]
     
-    cur.execute("""
-        SELECT country, COUNT(*) as university_count
-        FROM universities_world
-        GROUP BY country
-        ORDER BY university_count DESC
-    """)
+    countries = [c['country'] for c in top_countries]
+    counts = [c['count'] for c in top_countries]
     
-    results = cur.fetchall()
-    return [{'country': row[0], 'count': row[1]} for row in results]
-
-
-def calculate_correlations(conn):
-    """
-    Additional calculation: Compute correlations between variables.
-    """
-    cur = conn.cursor()
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Get data for correlation analysis
-    cur.execute("""
-        SELECT cf.in_state_tuition, cf.completion_rate, cf.earnings_10yr
-        FROM college_financials cf
-        WHERE cf.in_state_tuition IS NOT NULL 
-          AND cf.completion_rate IS NOT NULL
-          AND cf.earnings_10yr IS NOT NULL
-    """)
+    # Horizontal bar chart for better readability
+    colors = plt.cm.plasma(np.linspace(0.2, 0.8, len(countries)))
     
-    data = cur.fetchall()
+    bars = ax.barh(countries, counts, color=colors, edgecolor='black', linewidth=0.5)
     
-    if len(data) < 3:
-        return {}
+    ax.set_xlabel('Number of Universities', fontsize=12)
+    ax.set_ylabel('Country', fontsize=12)
+    ax.set_title('Universities per Country (Top 10)', fontsize=14, fontweight='bold')
     
-    tuitions = [row[0] for row in data]
-    completions = [row[1] for row in data]
-    earnings = [row[2] for row in data]
+    # Add value labels
+    for bar, count in zip(bars, counts):
+        width = bar.get_width()
+        ax.annotate(f'{count}',
+                    xy=(width, bar.get_y() + bar.get_height() / 2),
+                    xytext=(3, 0),
+                    textcoords="offset points",
+                    ha='left', va='center', fontsize=10)
     
-    # Calculate Pearson correlations
-    corr_tuition_completion = np.corrcoef(tuitions, completions)[0, 1]
-    corr_tuition_earnings = np.corrcoef(tuitions, earnings)[0, 1]
-    corr_completion_earnings = np.corrcoef(completions, earnings)[0, 1]
-    
-    return {
-        'tuition_vs_completion': corr_tuition_completion,
-        'tuition_vs_earnings': corr_tuition_earnings,
-        'completion_vs_earnings': corr_completion_earnings
-    }
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150)
+    plt.close()
+    print(f"Saved: {filename}")
 
 
 
