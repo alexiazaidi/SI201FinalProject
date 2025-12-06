@@ -7,11 +7,7 @@ from database_setup import init_db, get_table_counts
 DATABASE_NAME = "project.db"
 
 def calculate_state_level_stats(conn):
-    """
-    Alexia's function: Calculate state-level averages for U.S. colleges.
-    
-    Uses JOIN to combine us_colleges and college_financials tables.
-    """
+ 
     cur = conn.cursor()
     
 
@@ -42,9 +38,7 @@ def calculate_state_level_stats(conn):
 
 
 def calculate_correlations(conn):
-    """
-    Additional calculation: Compute correlations between variables.
-    """
+
     cur = conn.cursor()
     
 
@@ -79,11 +73,7 @@ def calculate_correlations(conn):
 
 
 def calculate_climate_and_completion(conn):
-    """
-    Eve's function: Join college data with weather to analyze climate's effect on outcomes.
-    
-    Uses two JOINs: us_colleges + college_financials + daily_weather
-    """
+
     cur = conn.cursor()
     
     cur.execute("""
@@ -113,9 +103,7 @@ def calculate_climate_and_completion(conn):
 
 
 def calculate_country_uni_counts(conn):
-    """
-    Parker's function: Count universities per country.
-    """
+
     cur = conn.cursor()
     
     cur.execute("""
@@ -131,9 +119,6 @@ def calculate_country_uni_counts(conn):
 
 
 def plot_state_tuition(state_stats, filename='visualizations/state_tuition.png'):
-    """
-    Alexia's visualization: Bar chart of average tuition by state.
-    """
 
     top_states = sorted(state_stats, key=lambda x: x['avg_in_state_tuition'] or 0, reverse=True)[:15]
     
@@ -167,9 +152,7 @@ def plot_state_tuition(state_stats, filename='visualizations/state_tuition.png')
 
 
 def plot_tuition_vs_completion(conn, filename='visualizations/tuition_vs_completion.png'):
-    """
-    Alexia's visualization: Scatter plot of tuition vs completion rate.
-    """
+
     cur = conn.cursor()
     cur.execute("""
         SELECT cf.in_state_tuition, cf.completion_rate
@@ -208,9 +191,7 @@ def plot_tuition_vs_completion(conn, filename='visualizations/tuition_vs_complet
 
 
 def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_vs_completion.png'):
-    """
-    Eve's visualization: Scatter plot showing climate's relationship with completion.
-    """
+
     if not climate_stats:
         print("⚠ No climate data available for visualization")
         return
@@ -271,9 +252,6 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
 
 
 def plot_universities_per_country(country_counts, filename='visualizations/universities_per_country.png'):
-    """
-    Parker's visualization: Bar chart of universities per country.
-    """
 
     top_countries = country_counts[:10]
     
@@ -307,11 +285,7 @@ def plot_universities_per_country(country_counts, filename='visualizations/unive
 
 def write_results_to_file(state_stats, climate_stats, country_counts, correlations, 
                           filename='results_summary.txt'):
-    """
-    Eve's function: Write all calculated results to a text file.
-    
-    This satisfies the "write calculated data to a file" requirement (10 points).
-    """
+
     with open(filename, 'w') as f:
         f.write("=" * 60 + "\n")
         f.write("SI 201 FINAL PROJECT - PEA TEAM RESULTS SUMMARY\n")
@@ -377,9 +351,6 @@ def write_results_to_file(state_stats, climate_stats, country_counts, correlatio
 
 
 
-# ============================================
-# BONUS VISUALIZATION 1: Earnings Analysis (15 points)
-# ============================================
 
 def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earnings_by_tuition.png'):
     """
@@ -394,7 +365,7 @@ def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earni
     """
     cur = conn.cursor()
     
-    # Get tuition and earnings data
+
     cur.execute("""
         SELECT cf.in_state_tuition, cf.earnings_10yr
         FROM college_financials cf
@@ -411,7 +382,6 @@ def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earni
     tuitions = [row[0] for row in data]
     earnings = [row[1] for row in data]
     
-    # Categorize colleges by tuition level
     tuition_25th = np.percentile(tuitions, 25)
     tuition_75th = np.percentile(tuitions, 75)
     
@@ -427,53 +397,42 @@ def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earni
         else:
             high_tuition_earnings.append(earning)
     
-    # Create box plot
     fig, ax = plt.subplots(figsize=(10, 7))
     
-    # Prepare data for box plot
     box_data = [low_tuition_earnings, med_tuition_earnings, high_tuition_earnings]
     labels = ['Low Tuition\n(< $' + f'{int(tuition_25th):,}' + ')',
               'Medium Tuition\n($' + f'{int(tuition_25th):,}' + ' - $' + f'{int(tuition_75th):,}' + ')',
               'High Tuition\n(> $' + f'{int(tuition_75th):,}' + ')']
     
-    # Create box plot with custom styling
     bp = ax.boxplot(box_data, tick_labels=labels, patch_artist=True,
-                    notch=True,  # Makes it different from lecture examples
-                    showmeans=True)  # Show mean as well as median
+                    notch=True,  
+                    showmeans=True)  
     
-    # Custom colors (gradient from light to dark green)
     colors = ['#90EE90', '#3CB371', '#006400']
     for patch, color in zip(bp['boxes'], colors):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
     
-    # Style the medians
     for median in bp['medians']:
         median.set(color='red', linewidth=2)
     
-    # Style the means
     for mean in bp['means']:
         mean.set(marker='D', markerfacecolor='orange', markersize=8)
     
-    # Labels and title
     ax.set_ylabel('10-Year Median Earnings ($)', fontsize=12)
     ax.set_xlabel('Tuition Category', fontsize=12)
     ax.set_title('Graduate Earnings by College Tuition Level', 
                  fontsize=14, fontweight='bold', pad=20)
     
-    # Add grid for readability
     ax.yaxis.grid(True, linestyle='--', alpha=0.3)
     
-    # Format y-axis to show currency
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${int(x/1000)}K'))
     
-    # Add statistics text box
     stats_text = f'Sample Size:\nLow: {len(low_tuition_earnings)}\nMed: {len(med_tuition_earnings)}\nHigh: {len(high_tuition_earnings)}'
     ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
             fontsize=9, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
-    # Add legend
     from matplotlib.lines import Line2D
     legend_elements = [
         Line2D([0], [0], color='red', linewidth=2, label='Median'),
@@ -489,24 +448,11 @@ def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earni
     print(f"✓ Saved BONUS: {filename}")
 
 
-# ============================================
-# BONUS VISUALIZATION 2: Geographic Heat Map (15 points)
-# ============================================
 
 def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_heatmap.png'):
-    """
-    BONUS Visualization 2: Heat map showing completion rates and college counts by state.
-    
-    This creates a dual-metric visualization not shown in lecture:
-    - Bubble chart where size = number of colleges
-    - Color = average completion rate
-    - Creates a "heat map" effect
-    
-    Worth: 15 points
-    """
+
     cur = conn.cursor()
-    
-    # Get state-level data
+
     cur.execute("""
         SELECT 
             c.state,
@@ -530,44 +476,34 @@ def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_hea
     
     states = [row[0] for row in results]
     college_counts = [row[1] for row in results]
-    completion_rates = [row[2] * 100 for row in results]  # Convert to percentage
+    completion_rates = [row[2] * 100 for row in results] 
     avg_tuitions = [row[3] or 0 for row in results]
     
-    # Create figure
     fig, ax = plt.subplots(figsize=(14, 8))
     
-    # Create bubble chart
-    # Size based on number of colleges (scaled for visibility)
     sizes = [count * 100 for count in college_counts]
     
-    # Color based on completion rate (using a colormap)
     scatter = ax.scatter(range(len(states)), completion_rates, 
-                        s=sizes,  # Size represents number of colleges
-                        c=completion_rates,  # Color represents completion rate
-                        cmap='RdYlGn',  # Red-Yellow-Green colormap
+                        s=sizes, 
+                        c=completion_rates,  
+                        cmap='RdYlGn', 
                         alpha=0.6,
                         edgecolors='black',
                         linewidth=1.5)
     
-    # Add colorbar
     cbar = plt.colorbar(scatter, ax=ax)
     cbar.set_label('Completion Rate (%)', rotation=270, labelpad=20, fontsize=11)
     
-    # Set x-axis
     ax.set_xticks(range(len(states)))
     ax.set_xticklabels(states, rotation=45, ha='right')
     ax.set_xlabel('State', fontsize=12)
     
-    # Set y-axis
     ax.set_ylabel('Average Completion Rate (%)', fontsize=12)
     ax.set_title('College Completion Rates by State\n(Bubble size = Number of Colleges)', 
                  fontsize=14, fontweight='bold', pad=20)
     
-    # Add grid
     ax.grid(True, alpha=0.3, linestyle='--')
     
-    # Add legend for bubble sizes
-    # Create sample bubbles for legend
     for count in [5, 20, 50]:
         if max(college_counts) >= count:
             ax.scatter([], [], s=count*100, c='gray', alpha=0.6, 
@@ -577,7 +513,6 @@ def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_hea
     ax.legend(scatterpoints=1, frameon=True, labelspacing=2, 
               title='Number of Colleges', loc='upper left')
     
-    # Add annotations for top 3 states
     for i in range(min(3, len(states))):
         ax.annotate(f'{states[i]}\n{college_counts[i]} colleges\n{completion_rates[i]:.1f}%',
                    xy=(i, completion_rates[i]),
@@ -595,11 +530,7 @@ def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_hea
 
 
 def main():
-    """
-    Main function that runs all calculations and creates all visualizations.
-    
-    Run this AFTER all data collection is complete.
-    """
+
 
     if not os.path.exists('visualizations'):
         os.makedirs('visualizations')
