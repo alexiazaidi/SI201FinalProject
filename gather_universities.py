@@ -1,4 +1,6 @@
 import requests
+from requests.exceptions import ChunkedEncodingError, RequestException
+
 import sqlite3
 from database_setup import init_db, get_table_counts
 
@@ -31,17 +33,28 @@ def fetch_universities_by_country(country):
         list: List of dictionaries with university data
     """
     params = {"country": country}
-    
     print(f"Fetching universities from {country}...")
-    response = requests.get(BASE_URL, params=params)
     
-    if response.status_code != 200:
-        print(f"Error: API returned status code {response.status_code}")
+    try:
+        # timeout just avoids hanging forever if the API is slow
+        response = requests.get(BASE_URL, params=params, timeout=20)
+        response.raise_for_status()
+    except ChunkedEncodingError as e:
+        print(f"Network error while fetching {country}: {e}")
+        print("Skipping this country for now.")
         return []
-    
-    universities = response.json()
+    except RequestException as e:
+        # Catches any other request-related error
+        print(f"Request failed for {country}: {e}")
+        return []
+
+    try:
+        universities = response.json()
+    except ValueError:
+        print(f"Error: Response from {country} was not valid JSON.")
+        return []
+
     print(f"Received {len(universities)} universities from {country}")
-    
     return universities
 
 
