@@ -1,12 +1,14 @@
+
+
 import requests
 import sqlite3
 from database_setup import init_db, get_table_counts
 
 
-API_KEY = "u0vFVXgpsddy1j2vde7XyLz7W5TrbEEfaYHsswt6"  #from https://api.data.gov/signup/
+API_KEY = "u0vFVXgpsddy1j2vde7XyLz7W5TrbEEfaYHsswt6"
 BASE_URL = "https://api.data.gov/ed/collegescorecard/v1/schools"
 DATABASE_NAME = "project.db"
-MAX_INSERT_PER_RUN = 25  
+MAX_INSERT_PER_RUN = 25 
 
 
 def fetch_college_page(api_key, page, per_page=100):
@@ -94,7 +96,8 @@ def store_college_page(conn, college_list):
         if inserted_count >= MAX_INSERT_PER_RUN:
             print(f"Reached {MAX_INSERT_PER_RUN} insertions limit for this run.")
             break
-
+        
+    
         college_id = college.get("id")
         if college_id is None:
             continue
@@ -105,7 +108,7 @@ def store_college_page(conn, college_list):
            
             continue
         
-       
+
         name = college.get("school.name", "Unknown")
         city = college.get("school.city")
         state = college.get("school.state")
@@ -122,7 +125,7 @@ def store_college_page(conn, college_list):
         completion_rate = college.get("latest.completion.rate_suppressed.overall")
         earnings_10yr = college.get("latest.earnings.10_yrs_after_entry.working_not_enrolled.mean_earnings")
         
-       
+        # ---- Insert into us_colleges table ----
         cur.execute('''
             INSERT INTO us_colleges 
             (id, name, city, state, zip, ownership, predominant_degree, lat, lon, student_size)
@@ -130,7 +133,7 @@ def store_college_page(conn, college_list):
         ''', (college_id, name, city, state, zip_code, ownership, 
               predominant_degree, lat, lon, student_size))
         
-       
+
         cur.execute('''
             INSERT INTO college_financials
             (id, in_state_tuition, out_state_tuition, academic_year_cost, completion_rate, earnings_10yr)
@@ -154,22 +157,33 @@ def get_next_page_to_fetch(conn):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM us_colleges")
     current_count = cur.fetchone()[0]
+    
 
     return current_count // 100
 
 
 def main():
- 
+    """
+    Main execution function.
+    
+    WORKFLOW:
+    1. Connect to database
+    2. Check current progress
+    3. Fetch data from API
+    4. Store up to 25 new records
+    5. Report final status
+    """
+
     conn = init_db(DATABASE_NAME)
     
-    
+
     print("=== BEFORE DATA COLLECTION ===")
     get_table_counts(conn)
     
-   
+
     page = get_next_page_to_fetch(conn)
     
-    
+
     colleges = fetch_college_page(API_KEY, page=page, per_page=100)
     
     if not colleges:
@@ -177,14 +191,13 @@ def main():
         conn.close()
         return
     
-    
+
     inserted = store_college_page(conn, colleges)
-    
     
     print("\n=== AFTER DATA COLLECTION ===")
     get_table_counts(conn)
     
-   
+
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM us_colleges")
     total = cur.fetchone()[0]
