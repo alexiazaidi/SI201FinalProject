@@ -377,6 +377,223 @@ def write_results_to_file(state_stats, climate_stats, country_counts, correlatio
 
 
 
+# ============================================
+# BONUS VISUALIZATION 1: Earnings Analysis (15 points)
+# ============================================
+
+def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earnings_by_tuition.png'):
+    """
+    BONUS Visualization 1: Box plot showing earnings distribution by tuition category.
+    
+    This creates a unique visualization not shown in lecture:
+    - Categorizes colleges by tuition level (Low/Medium/High)
+    - Shows distribution of 10-year earnings for each category
+    - Uses box plots to show quartiles and outliers
+    
+    Worth: 15 points
+    """
+    cur = conn.cursor()
+    
+    # Get tuition and earnings data
+    cur.execute("""
+        SELECT cf.in_state_tuition, cf.earnings_10yr
+        FROM college_financials cf
+        WHERE cf.in_state_tuition IS NOT NULL 
+          AND cf.earnings_10yr IS NOT NULL
+    """)
+    
+    data = cur.fetchall()
+    
+    if len(data) < 10:
+        print("⚠️  Not enough data for earnings visualization")
+        return
+    
+    tuitions = [row[0] for row in data]
+    earnings = [row[1] for row in data]
+    
+    # Categorize colleges by tuition level
+    tuition_25th = np.percentile(tuitions, 25)
+    tuition_75th = np.percentile(tuitions, 75)
+    
+    low_tuition_earnings = []
+    med_tuition_earnings = []
+    high_tuition_earnings = []
+    
+    for tuition, earning in zip(tuitions, earnings):
+        if tuition < tuition_25th:
+            low_tuition_earnings.append(earning)
+        elif tuition < tuition_75th:
+            med_tuition_earnings.append(earning)
+        else:
+            high_tuition_earnings.append(earning)
+    
+    # Create box plot
+    fig, ax = plt.subplots(figsize=(10, 7))
+    
+    # Prepare data for box plot
+    box_data = [low_tuition_earnings, med_tuition_earnings, high_tuition_earnings]
+    labels = ['Low Tuition\n(< $' + f'{int(tuition_25th):,}' + ')',
+              'Medium Tuition\n($' + f'{int(tuition_25th):,}' + ' - $' + f'{int(tuition_75th):,}' + ')',
+              'High Tuition\n(> $' + f'{int(tuition_75th):,}' + ')']
+    
+    # Create box plot with custom styling
+    bp = ax.boxplot(box_data, tick_labels=labels, patch_artist=True,
+                    notch=True,  # Makes it different from lecture examples
+                    showmeans=True)  # Show mean as well as median
+    
+    # Custom colors (gradient from light to dark green)
+    colors = ['#90EE90', '#3CB371', '#006400']
+    for patch, color in zip(bp['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    
+    # Style the medians
+    for median in bp['medians']:
+        median.set(color='red', linewidth=2)
+    
+    # Style the means
+    for mean in bp['means']:
+        mean.set(marker='D', markerfacecolor='orange', markersize=8)
+    
+    # Labels and title
+    ax.set_ylabel('10-Year Median Earnings ($)', fontsize=12)
+    ax.set_xlabel('Tuition Category', fontsize=12)
+    ax.set_title('Graduate Earnings by College Tuition Level', 
+                 fontsize=14, fontweight='bold', pad=20)
+    
+    # Add grid for readability
+    ax.yaxis.grid(True, linestyle='--', alpha=0.3)
+    
+    # Format y-axis to show currency
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${int(x/1000)}K'))
+    
+    # Add statistics text box
+    stats_text = f'Sample Size:\nLow: {len(low_tuition_earnings)}\nMed: {len(med_tuition_earnings)}\nHigh: {len(high_tuition_earnings)}'
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+            fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
+    # Add legend
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], color='red', linewidth=2, label='Median'),
+        Line2D([0], [0], marker='D', color='w', markerfacecolor='orange', 
+               markersize=8, label='Mean')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"✓ Saved BONUS: {filename}")
+
+
+# ============================================
+# BONUS VISUALIZATION 2: Geographic Heat Map (15 points)
+# ============================================
+
+def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_heatmap.png'):
+    """
+    BONUS Visualization 2: Heat map showing completion rates and college counts by state.
+    
+    This creates a dual-metric visualization not shown in lecture:
+    - Bubble chart where size = number of colleges
+    - Color = average completion rate
+    - Creates a "heat map" effect
+    
+    Worth: 15 points
+    """
+    cur = conn.cursor()
+    
+    # Get state-level data
+    cur.execute("""
+        SELECT 
+            c.state,
+            COUNT(*) as num_colleges,
+            AVG(cf.completion_rate) as avg_completion,
+            AVG(cf.in_state_tuition) as avg_tuition
+        FROM us_colleges c
+        JOIN college_financials cf ON c.id = cf.id
+        WHERE c.state IS NOT NULL 
+          AND cf.completion_rate IS NOT NULL
+        GROUP BY c.state
+        HAVING num_colleges >= 1
+        ORDER BY num_colleges DESC
+    """)
+    
+    results = cur.fetchall()
+    
+    if len(results) < 3:
+        print("⚠️  Not enough states for heatmap visualization")
+        return
+    
+    states = [row[0] for row in results]
+    college_counts = [row[1] for row in results]
+    completion_rates = [row[2] * 100 for row in results]  # Convert to percentage
+    avg_tuitions = [row[3] or 0 for row in results]
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Create bubble chart
+    # Size based on number of colleges (scaled for visibility)
+    sizes = [count * 100 for count in college_counts]
+    
+    # Color based on completion rate (using a colormap)
+    scatter = ax.scatter(range(len(states)), completion_rates, 
+                        s=sizes,  # Size represents number of colleges
+                        c=completion_rates,  # Color represents completion rate
+                        cmap='RdYlGn',  # Red-Yellow-Green colormap
+                        alpha=0.6,
+                        edgecolors='black',
+                        linewidth=1.5)
+    
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax)
+    cbar.set_label('Completion Rate (%)', rotation=270, labelpad=20, fontsize=11)
+    
+    # Set x-axis
+    ax.set_xticks(range(len(states)))
+    ax.set_xticklabels(states, rotation=45, ha='right')
+    ax.set_xlabel('State', fontsize=12)
+    
+    # Set y-axis
+    ax.set_ylabel('Average Completion Rate (%)', fontsize=12)
+    ax.set_title('College Completion Rates by State\n(Bubble size = Number of Colleges)', 
+                 fontsize=14, fontweight='bold', pad=20)
+    
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle='--')
+    
+    # Add legend for bubble sizes
+    # Create sample bubbles for legend
+    for count in [5, 20, 50]:
+        if max(college_counts) >= count:
+            ax.scatter([], [], s=count*100, c='gray', alpha=0.6, 
+                      edgecolors='black', linewidth=1.5,
+                      label=f'{count} colleges')
+    
+    ax.legend(scatterpoints=1, frameon=True, labelspacing=2, 
+              title='Number of Colleges', loc='upper left')
+    
+    # Add annotations for top 3 states
+    for i in range(min(3, len(states))):
+        ax.annotate(f'{states[i]}\n{college_counts[i]} colleges\n{completion_rates[i]:.1f}%',
+                   xy=(i, completion_rates[i]),
+                   xytext=(10, 10),
+                   textcoords='offset points',
+                   fontsize=8,
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"✓ Saved BONUS: {filename}")
+
+
 def main():
     """
     Main function that runs all calculations and creates all visualizations.
@@ -434,19 +651,33 @@ def main():
     print("\n=== WRITING RESULTS FILE ===")
     write_results_to_file(state_stats, climate_stats, country_counts, correlations)
     
+    print("\n=== CREATING BONUS VISUALIZATIONS (Extra Credit) ===")
+    print("Creating earnings by tuition category box plot...")
+    plot_earnings_by_tuition_category(conn)
+    
+    print("Creating state completion heat map...")
+    plot_state_completion_heatmap(conn)
+    
     print("\n" + "=" * 60)
     print("✓ ALL PROCESSING COMPLETE!")
     print("=" * 60)
+    
     print("\nCheck the 'visualizations' folder for your graphs:")
-    print("  - state_tuition.png")
-    print("  - tuition_vs_completion.png")
-    print("  - climate_vs_completion.png")
-    print("  - universities_per_country.png")
+    print("\nRequired Visualizations:")
+    print("    - state_tuition.png")
+    print("    - tuition_vs_completion.png")
+    print("    - climate_vs_completion.png")
+    print("    - universities_per_country.png")
+    
+    print("\nBONUS Visualizations")
+    print("    - bonus_earnings_by_tuition.png")
+    print("    - bonus_state_heatmap.png")
+    
     print("\nCheck 'results_summary.txt' for calculated data.")
     print("=" * 60)
     
     conn.close()
 
-
+    
 if __name__ == "__main__":
     main()
