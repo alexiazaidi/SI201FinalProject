@@ -1,3 +1,13 @@
 .DS_Store
 project.db
 __pycache__/
+
+.DS_Store
+cat >> .gitignore <<'EOF'
+.DS_Store
+__pycache__/
+*.py[cod]
+
+project.db
+results_summary.txt
+visualizations/
