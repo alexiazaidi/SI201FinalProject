@@ -1,50 +1,91 @@
 import sqlite3
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+from database_setup import init_db, get_table_counts
 
-# ============================================
-# STEP 7: Calculate Climate and Completion
-# ============================================
+DATABASE_NAME = "project.db"
+
+def calculate_state_level_stats(conn):
+    """
+    Alexia's function: Calculate state-level averages for U.S. colleges.
+    
+    Uses JOIN to combine us_colleges and college_financials tables.
+    """
+    cur = conn.cursor()
+    
+
+    cur.execute("""
+        SELECT 
+            c.state,
+            COUNT(*) as num_colleges,
+            AVG(cf.in_state_tuition) as avg_in_state_tuition,
+            AVG(cf.out_state_tuition) as avg_out_state_tuition,
+            AVG(cf.academic_year_cost) as avg_total_cost,
+            AVG(cf.completion_rate) as avg_completion_rate,
+            AVG(cf.earnings_10yr) as avg_earnings,
+            SUM(c.student_size) as total_students
+        FROM us_colleges c
+        JOIN college_financials cf ON c.id = cf.id
+        WHERE c.state IS NOT NULL
+        GROUP BY c.state
+        ORDER BY avg_in_state_tuition DESC
+    """)
+    
+    results = cur.fetchall()
+    
+
+    columns = ['state', 'num_colleges', 'avg_in_state_tuition', 'avg_out_state_tuition',
+               'avg_total_cost', 'avg_completion_rate', 'avg_earnings', 'total_students']
+    
+    return [dict(zip(columns, row)) for row in results]
+
+
+def calculate_correlations(conn):
+    """
+    Additional calculation: Compute correlations between variables.
+    """
+    cur = conn.cursor()
+    
+
+    cur.execute("""
+        SELECT cf.in_state_tuition, cf.completion_rate, cf.earnings_10yr
+        FROM college_financials cf
+        WHERE cf.in_state_tuition IS NOT NULL 
+          AND cf.completion_rate IS NOT NULL
+          AND cf.earnings_10yr IS NOT NULL
+    """)
+    
+    data = cur.fetchall()
+    
+    if len(data) < 3:
+        return {}
+    
+    tuitions = [row[0] for row in data]
+    completions = [row[1] for row in data]
+    earnings = [row[2] for row in data]
+    
+
+    corr_tuition_completion = np.corrcoef(tuitions, completions)[0, 1]
+    corr_tuition_earnings = np.corrcoef(tuitions, earnings)[0, 1]
+    corr_completion_earnings = np.corrcoef(completions, earnings)[0, 1]
+    
+    return {
+        'tuition_vs_completion': corr_tuition_completion,
+        'tuition_vs_earnings': corr_tuition_earnings,
+        'completion_vs_earnings': corr_completion_earnings
+    }
+
+
 
 def calculate_climate_and_completion(conn):
     """
     Eve's function: Join college data with weather to analyze climate's effect on outcomes.
     
     Uses two JOINs: us_colleges + college_financials + daily_weather
-    
-    This satisfies the rubric requirement for using JOIN queries (20 points).
-    
-    Parameters:
-        conn: SQLite connection object
-    
-    Returns:
-        list: List of dictionaries containing:
-            - state: State abbreviation
-            - name: College name
-            - in_state_tuition: In-state tuition cost
-            - completion_rate: Completion rate (0-1 scale)
-            - earnings_10yr: Average earnings 10 years after entry
-            - avg_temp_max: Average maximum temperature (Celsius)
-            - avg_temp_min: Average minimum temperature (Celsius)
-            - avg_precip: Average precipitation (mm)
-    
-    Example output:
-        [
-            {
-                'state': 'CA',
-                'name': 'Stanford University',
-                'in_state_tuition': 55000,
-                'completion_rate': 0.95,
-                'earnings_10yr': 90000,
-                'avg_temp_max': 22.5,
-                'avg_temp_min': 12.3,
-                'avg_precip': 0.5
-            },
-            ...
-        ]
     """
     cur = conn.cursor()
-
+    
     cur.execute("""
         SELECT 
             c.state,
@@ -64,130 +105,111 @@ def calculate_climate_and_completion(conn):
     """)
     
     results = cur.fetchall()
-    
-
     columns = ['state', 'name', 'in_state_tuition', 'completion_rate', 
                'earnings_10yr', 'avg_temp_max', 'avg_temp_min', 'avg_precip']
     
-
     return [dict(zip(columns, row)) for row in results]
 
 
-# ============================================
-# STEP 8: Write Results to File
-# ============================================
 
-def write_results_to_file(state_stats, climate_stats, country_counts, correlations, 
-                          filename='results_summary.txt'):
+def calculate_country_uni_counts(conn):
     """
-    Eve's function: Write all calculated results to a text file.
-    
-    This satisfies the "write calculated data to a file" requirement (10 points).
-    
-    Parameters:
-        state_stats (list): State-level statistics from calculate_state_level_stats()
-        climate_stats (list): Climate/completion data from calculate_climate_and_completion()
-        country_counts (list): University counts by country
-        correlations (dict): Correlation coefficients
-        filename (str): Output filename (default: 'results_summary.txt')
-    
-    Creates a formatted text file with:
-        - State-level college statistics
-        - Correlation analysis
-        - Climate and completion analysis
-        - Global university counts
+    Parker's function: Count universities per country.
     """
-    with open(filename, 'w') as f:
-        # Header
-        f.write("=" * 60 + "\n")
-        f.write("SI 201 FINAL PROJECT - PEA TEAM RESULTS SUMMARY\n")
-        f.write("=" * 60 + "\n\n")
-        
-        # ---- SECTION 1: State-level statistics ----
-        f.write("SECTION 1: STATE-LEVEL COLLEGE STATISTICS\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"{'State':<8} {'# Colleges':<12} {'Avg Tuition':<15} {'Completion %':<15}\n")
-        f.write("-" * 40 + "\n")
-        
-        for state in state_stats[:20]:  # Top 20 states
-            tuition = f"${int(state['avg_in_state_tuition'] or 0):,}"
-            completion = f"{(state['avg_completion_rate'] or 0) * 100:.1f}%"
-            f.write(f"{state['state']:<8} {state['num_colleges']:<12} {tuition:<15} {completion:<15}\n")
-        
-        f.write("\n")
-        
-        # ---- SECTION 2: Correlations ----
-        f.write("SECTION 2: CORRELATION ANALYSIS\n")
-        f.write("-" * 40 + "\n")
-        if correlations:
-            f.write(f"Tuition vs Completion Rate:  {correlations.get('tuition_vs_completion', 'N/A'):.4f}\n")
-            f.write(f"Tuition vs 10-Year Earnings: {correlations.get('tuition_vs_earnings', 'N/A'):.4f}\n")
-            f.write(f"Completion vs Earnings:      {correlations.get('completion_vs_earnings', 'N/A'):.4f}\n")
-        else:
-            f.write("Insufficient data for correlation analysis\n")
-        
-        f.write("\n")
-        
-        # ---- SECTION 3: Climate analysis ----
-        f.write("SECTION 3: CLIMATE AND COMPLETION ANALYSIS\n")
-        f.write("-" * 40 + "\n")
-        if climate_stats:
-            f.write(f"Number of colleges with climate data: {len(climate_stats)}\n")
-            
-            # Calculate overall averages
-            avg_temp = sum(s['avg_temp_max'] or 0 for s in climate_stats) / len(climate_stats)
-            avg_precip = sum(s['avg_precip'] or 0 for s in climate_stats) / len(climate_stats)
-            avg_completion = sum((s['completion_rate'] or 0) for s in climate_stats) / len(climate_stats)
-            
-            f.write(f"Average max temperature across colleges: {avg_temp:.1f}°C\n")
-            f.write(f"Average precipitation: {avg_precip:.2f} mm\n")
-            f.write(f"Average completion rate: {avg_completion * 100:.1f}%\n")
-            
-            # Show top 5 colleges with best completion rates
-            f.write("\nTop 5 Colleges by Completion Rate:\n")
-            sorted_colleges = sorted(climate_stats, key=lambda x: x['completion_rate'] or 0, reverse=True)
-            for i, college in enumerate(sorted_colleges[:5], 1):
-                f.write(f"  {i}. {college['name']} ({college['state']})\n")
-                f.write(f"     Completion: {(college['completion_rate'] or 0) * 100:.1f}%\n")
-                f.write(f"     Avg Temp: {college['avg_temp_max']:.1f}°C\n")
-        else:
-            f.write("No climate data available\n")
-        
-        f.write("\n")
-        
-        # ---- SECTION 4: Global university counts ----
-        f.write("SECTION 4: UNIVERSITIES BY COUNTRY\n")
-        f.write("-" * 40 + "\n")
-        for country in country_counts[:10]:
-            f.write(f"{country['country']:<25} {country['count']:>5} universities\n")
-        
-        f.write("\n")
-        f.write("=" * 60 + "\n")
-        f.write("END OF REPORT\n")
-        f.write("=" * 60 + "\n")
+    cur = conn.cursor()
     
-    print(f"✓ Results written to: {filename}")
+    cur.execute("""
+        SELECT country, COUNT(*) as university_count
+        FROM universities_world
+        GROUP BY country
+        ORDER BY university_count DESC
+    """)
+    
+    results = cur.fetchall()
+    return [{'country': row[0], 'count': row[1]} for row in results]
 
 
-# ============================================
-# STEP 9: Plot Climate vs Completion
-# ============================================
+
+def plot_state_tuition(state_stats, filename='visualizations/state_tuition.png'):
+    """
+    Alexia's visualization: Bar chart of average tuition by state.
+    """
+
+    top_states = sorted(state_stats, key=lambda x: x['avg_in_state_tuition'] or 0, reverse=True)[:15]
+    
+    states = [s['state'] for s in top_states]
+    tuitions = [s['avg_in_state_tuition'] or 0 for s in top_states]
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    colors = plt.cm.viridis(np.linspace(0.2, 0.8, len(states)))
+    
+    bars = ax.bar(states, tuitions, color=colors, edgecolor='black', linewidth=0.5)
+    
+    ax.set_xlabel('State', fontsize=12)
+    ax.set_ylabel('Average In-State Tuition ($)', fontsize=12)
+    ax.set_title('Top 15 States by Average In-State College Tuition', fontsize=14, fontweight='bold')
+    
+
+    for bar, tuition in zip(bars, tuitions):
+        height = bar.get_height()
+        ax.annotate(f'${int(height):,}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=8, rotation=45)
+    
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"✓ Saved: {filename}")
+
+
+def plot_tuition_vs_completion(conn, filename='visualizations/tuition_vs_completion.png'):
+    """
+    Alexia's visualization: Scatter plot of tuition vs completion rate.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT cf.in_state_tuition, cf.completion_rate
+        FROM college_financials cf
+        WHERE cf.in_state_tuition IS NOT NULL 
+          AND cf.completion_rate IS NOT NULL
+    """)
+    data = cur.fetchall()
+    
+    tuitions = [row[0] for row in data]
+    completions = [row[1] * 100 for row in data] 
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    scatter = ax.scatter(tuitions, completions, alpha=0.6, c='steelblue', 
+                         edgecolors='navy', linewidth=0.5, s=50)
+    
+    z = np.polyfit(tuitions, completions, 1)
+    p = np.poly1d(z)
+    x_line = np.linspace(min(tuitions), max(tuitions), 100)
+    ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Trend Line')
+    
+    ax.set_xlabel('In-State Tuition ($)', fontsize=12)
+    ax.set_ylabel('Completion Rate (%)', fontsize=12)
+    ax.set_title('College Tuition vs. Completion Rate', fontsize=14, fontweight='bold')
+    ax.legend()
+    
+    corr = np.corrcoef(tuitions, completions)[0, 1]
+    ax.text(0.05, 0.95, f'Correlation: {corr:.3f}', transform=ax.transAxes,
+            fontsize=10, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat'))
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150)
+    plt.close()
+    print(f"✓ Saved: {filename}")
+
 
 def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_vs_completion.png'):
     """
     Eve's visualization: Scatter plot showing climate's relationship with completion.
-    
-    Creates a scatter plot with:
-        - X-axis: Average maximum temperature (°C)
-        - Y-axis: Completion rate (%)
-        - Trend line showing correlation
-        - Correlation coefficient displayed
-    
-    Parameters:
-        climate_stats (list): Data from calculate_climate_and_completion()
-        filename (str): Where to save the plot
-    
-    This satisfies one of the 3 required visualizations (50 points total).
     """
     if not climate_stats:
         print("⚠ No climate data available for visualization")
@@ -202,31 +224,23 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
     
     fig, ax = plt.subplots(figsize=(10, 6))
     
-
     scatter = ax.scatter(temps, completions, 
-                        alpha=0.6,         
-                        c='coral',          
+                        alpha=0.6,
+                        c='coral',
                         edgecolors='darkred',
                         linewidth=0.5,
-                        s=60)              
+                        s=60)
     
-    # Add trend line
-    z = np.polyfit(temps, completions, 1)  # Linear fit
+    z = np.polyfit(temps, completions, 1)
     p = np.poly1d(z)
     x_line = np.linspace(min(temps), max(temps), 100)
-    ax.plot(x_line, p(x_line), 
-            "b--",                    # Blue dashed line
-            alpha=0.8, 
-            linewidth=2, 
-            label='Trend Line')
+    ax.plot(x_line, p(x_line), "b--", alpha=0.8, linewidth=2, label='Trend Line')
     
-    # Labels and title
     ax.set_xlabel('Average Max Temperature (°C)', fontsize=12)
     ax.set_ylabel('Completion Rate (%)', fontsize=12)
     ax.set_title('Climate vs. College Completion Rate', fontsize=14, fontweight='bold')
     ax.legend()
     
-    # Calculate and display correlation
     corr = np.corrcoef(temps, completions)[0, 1]
     ax.text(0.05, 0.95, 
             f'Correlation: {corr:.3f}', 
@@ -235,7 +249,6 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
             verticalalignment='top', 
             bbox=dict(boxstyle='round', facecolor='lightcyan', alpha=0.8))
     
-    # Add interpretation text
     if abs(corr) < 0.3:
         interpretation = "Weak correlation"
     elif abs(corr) < 0.7:
@@ -250,40 +263,190 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
             verticalalignment='top',
             style='italic')
     
-    # Save the plot
     plt.tight_layout()
     plt.savefig(filename, dpi=150)
     plt.close()
-    
     print(f"✓ Saved: {filename}")
 
 
-# ============================================
-# USAGE EXAMPLE
-# ============================================
 
-if __name__ == "__main__":
+def plot_universities_per_country(country_counts, filename='visualizations/universities_per_country.png'):
     """
-    This shows how to use these functions.
-    In the actual project, these will be called from the main() function.
+    Parker's visualization: Bar chart of universities per country.
     """
+
+    top_countries = country_counts[:10]
     
-    # Connect to database
-    conn = sqlite3.connect("project.db")
+    countries = [c['country'] for c in top_countries]
+    counts = [c['count'] for c in top_countries]
     
-    # Step 7: Calculate climate and completion data
-    print("Step 7: Calculating climate and completion data...")
-    climate_data = calculate_climate_and_completion(conn)
-    print(f"Found {len(climate_data)} colleges with complete climate data")
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Step 9: Create visualization
-    print("\nStep 9: Creating climate vs completion plot...")
-    plot_climate_vs_completion(climate_data)
+    colors = plt.cm.plasma(np.linspace(0.2, 0.8, len(countries)))
     
-    # Step 8: Write results to file
-    # (This would normally include data from other calculations too)
-    print("\nStep 8: Writing results to file...")
-    # write_results_to_file([], climate_data, [], {})
+    bars = ax.barh(countries, counts, color=colors, edgecolor='black', linewidth=0.5)
+    
+    ax.set_xlabel('Number of Universities', fontsize=12)
+    ax.set_ylabel('Country', fontsize=12)
+    ax.set_title('Universities per Country (Top 10)', fontsize=14, fontweight='bold')
+    
+    for bar, count in zip(bars, counts):
+        width = bar.get_width()
+        ax.annotate(f'{count}',
+                    xy=(width, bar.get_y() + bar.get_height() / 2),
+                    xytext=(3, 0),
+                    textcoords="offset points",
+                    ha='left', va='center', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150)
+    plt.close()
+    print(f"✓ Saved: {filename}")
+
+
+
+def write_results_to_file(state_stats, climate_stats, country_counts, correlations, 
+                          filename='results_summary.txt'):
+    """
+    Eve's function: Write all calculated results to a text file.
+    
+    This satisfies the "write calculated data to a file" requirement (10 points).
+    """
+    with open(filename, 'w') as f:
+        f.write("=" * 60 + "\n")
+        f.write("SI 201 FINAL PROJECT - PEA TEAM RESULTS SUMMARY\n")
+        f.write("=" * 60 + "\n\n")
+        
+        f.write("SECTION 1: STATE-LEVEL COLLEGE STATISTICS\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'State':<8} {'# Colleges':<12} {'Avg Tuition':<15} {'Completion %':<15}\n")
+        f.write("-" * 40 + "\n")
+        
+        for state in state_stats[:20]:  
+            tuition = f"${int(state['avg_in_state_tuition'] or 0):,}"
+            completion = f"{(state['avg_completion_rate'] or 0) * 100:.1f}%"
+            f.write(f"{state['state']:<8} {state['num_colleges']:<12} {tuition:<15} {completion:<15}\n")
+        
+        f.write("\n")
+        
+        f.write("SECTION 2: CORRELATION ANALYSIS\n")
+        f.write("-" * 40 + "\n")
+        if correlations:
+            f.write(f"Tuition vs Completion Rate:  {correlations.get('tuition_vs_completion', 'N/A'):.4f}\n")
+            f.write(f"Tuition vs 10-Year Earnings: {correlations.get('tuition_vs_earnings', 'N/A'):.4f}\n")
+            f.write(f"Completion vs Earnings:      {correlations.get('completion_vs_earnings', 'N/A'):.4f}\n")
+        else:
+            f.write("Insufficient data for correlation analysis\n")
+        
+        f.write("\n")
+        
+
+        f.write("SECTION 3: CLIMATE AND COMPLETION ANALYSIS\n")
+        f.write("-" * 40 + "\n")
+        if climate_stats:
+            f.write(f"Number of colleges with climate data: {len(climate_stats)}\n")
+            avg_temp = sum(s['avg_temp_max'] or 0 for s in climate_stats) / len(climate_stats)
+            avg_precip = sum(s['avg_precip'] or 0 for s in climate_stats) / len(climate_stats)
+            avg_completion = sum((s['completion_rate'] or 0) for s in climate_stats) / len(climate_stats)
+            f.write(f"Average max temperature across colleges: {avg_temp:.1f}°C\n")
+            f.write(f"Average precipitation: {avg_precip:.2f} mm\n")
+            f.write(f"Average completion rate: {avg_completion * 100:.1f}%\n")
+            
+            f.write("\nTop 5 Colleges by Completion Rate:\n")
+            sorted_colleges = sorted(climate_stats, key=lambda x: x['completion_rate'] or 0, reverse=True)
+            for i, college in enumerate(sorted_colleges[:5], 1):
+                f.write(f"  {i}. {college['name']} ({college['state']})\n")
+                f.write(f"     Completion: {(college['completion_rate'] or 0) * 100:.1f}%\n")
+                f.write(f"     Avg Temp: {college['avg_temp_max']:.1f}°C\n")
+        else:
+            f.write("No climate data available\n")
+        
+        f.write("\n")
+        
+        f.write("SECTION 4: UNIVERSITIES BY COUNTRY\n")
+        f.write("-" * 40 + "\n")
+        for country in country_counts[:10]:
+            f.write(f"{country['country']:<25} {country['count']:>5} universities\n")
+        
+        f.write("\n")
+        f.write("=" * 60 + "\n")
+        f.write("END OF REPORT\n")
+        f.write("=" * 60 + "\n")
+    
+    print(f"✓ Results written to: {filename}")
+
+
+
+def main():
+    """
+    Main function that runs all calculations and creates all visualizations.
+    
+    Run this AFTER all data collection is complete.
+    """
+
+    if not os.path.exists('visualizations'):
+        os.makedirs('visualizations')
+    
+    conn = sqlite3.connect(DATABASE_NAME)
+    
+    print("=" * 60)
+    print("SI 201 FINAL PROJECT - DATA PROCESSING & VISUALIZATION")
+    print("=" * 60)
+    
+    print("\n=== CURRENT DATABASE STATUS ===")
+    get_table_counts(conn)
+    
+    print("\n=== RUNNING CALCULATIONS ===")
+    
+    print("Calculating state-level statistics...")
+    state_stats = calculate_state_level_stats(conn)
+    print(f"  ✓ Found data for {len(state_stats)} states")
+    
+    print("Calculating climate and completion data...")
+    climate_stats = calculate_climate_and_completion(conn)
+    print(f"  ✓ Found {len(climate_stats)} colleges with climate data")
+    
+    print("Calculating country university counts...")
+    country_counts = calculate_country_uni_counts(conn)
+    print(f"  ✓ Found universities in {len(country_counts)} countries")
+    
+    print("Calculating correlations...")
+    correlations = calculate_correlations(conn)
+    print(f"  ✓ Computed {len(correlations)} correlations")
+    
+    print("\n=== CREATING VISUALIZATIONS ===")
+    
+    if state_stats:
+        print("Creating state tuition chart...")
+        plot_state_tuition(state_stats)
+    
+    print("Creating tuition vs completion scatter plot...")
+    plot_tuition_vs_completion(conn)
+    
+    if climate_stats:
+        print("Creating climate vs completion plot...")
+        plot_climate_vs_completion(climate_stats)
+    
+    if country_counts:
+        print("Creating universities per country chart...")
+        plot_universities_per_country(country_counts)
+    
+    print("\n=== WRITING RESULTS FILE ===")
+    write_results_to_file(state_stats, climate_stats, country_counts, correlations)
+    
+    print("\n" + "=" * 60)
+    print("✓ ALL PROCESSING COMPLETE!")
+    print("=" * 60)
+    print("\n📊 Check the 'visualizations' folder for your graphs:")
+    print("  - state_tuition.png")
+    print("  - tuition_vs_completion.png")
+    print("  - climate_vs_completion.png")
+    print("  - universities_per_country.png")
+    print("\n📄 Check 'results_summary.txt' for calculated data.")
+    print("=" * 60)
     
     conn.close()
-    print("\n✓ All Eve's functions completed!")
+
+
+if __name__ == "__main__":
+    main()
