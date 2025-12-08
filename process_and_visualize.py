@@ -83,12 +83,11 @@ def calculate_climate_and_completion(conn):
     """
     cur = conn.cursor()
     
-    # FIXED: Added check for weather data existence
     cur.execute("SELECT COUNT(*) FROM daily_weather")
     weather_count = cur.fetchone()[0]
     
     if weather_count == 0:
-        print("⚠️ WARNING: No weather data found in database!")
+        print(" WARNING: No weather data found in database!")
         print("   Please run gather_weather.py multiple times to collect weather data.")
         return []
     
@@ -114,7 +113,7 @@ def calculate_climate_and_completion(conn):
     results = cur.fetchall()
     
     if len(results) == 0:
-        print("⚠️ WARNING: JOIN returned no results!")
+        print(" WARNING: JOIN returned no results!")
         print("   This means weather data exists but doesn't match college IDs.")
         return []
     
@@ -142,12 +141,11 @@ def calculate_country_uni_counts(conn):
 def plot_state_tuition(state_stats, filename='visualizations/state_tuition.png'):
     """FIXED: Filter out states with no valid tuition data"""
     
-    # Filter out None values
     valid_states = [s for s in state_stats if s['avg_in_state_tuition'] is not None]
     top_states = sorted(valid_states, key=lambda x: x['avg_in_state_tuition'], reverse=True)[:15]
     
     if len(top_states) == 0:
-        print("⚠️ No valid tuition data for visualization")
+        print(" No valid tuition data for visualization")
         return
     
     states = [s['state'] for s in top_states]
@@ -192,7 +190,7 @@ def plot_tuition_vs_completion(conn, filename='visualizations/tuition_vs_complet
     data = cur.fetchall()
     
     if len(data) < 2:
-        print("⚠️ Not enough data for tuition vs completion plot")
+        print(" Not enough data for tuition vs completion plot")
         return
     
     tuitions = [row[0] for row in data]
@@ -227,7 +225,7 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
     """FIXED: Better validation and error messages"""
     
     if not climate_stats or len(climate_stats) == 0:
-        print("⚠️ No climate data available for visualization")
+        print(" No climate data available for visualization")
         print("   ACTION REQUIRED: Run gather_weather.py multiple times!")
         return
     
@@ -236,7 +234,7 @@ def plot_climate_vs_completion(climate_stats, filename='visualizations/climate_v
                   if s['avg_temp_max'] is not None and s['completion_rate'] is not None]
     
     if len(valid_data) < 2:
-        print(f"⚠️ Not enough valid data points for climate visualization (need at least 2, have {len(valid_data)})")
+        print(f" Not enough valid data points for climate visualization (need at least 2, have {len(valid_data)})")
         return
     
     temps, completions = zip(*valid_data)
@@ -292,7 +290,7 @@ def plot_universities_per_country(country_counts, filename='visualizations/unive
     """Plot universities by country"""
     
     if not country_counts:
-        print("⚠️ No university data for visualization")
+        print(" No university data for visualization")
         return
     
     top_countries = country_counts[:10]
@@ -379,7 +377,7 @@ def write_results_to_file(state_stats, climate_stats, country_counts, correlatio
                 f.write(f"     Completion: {(college['completion_rate'] or 0) * 100:.1f}%\n")
                 f.write(f"     Avg Temp: {college['avg_temp_max']:.1f}°C\n")
         else:
-            f.write("⚠️ NO CLIMATE DATA AVAILABLE\n")
+            f.write(" NO CLIMATE DATA AVAILABLE\n")
             f.write("\nACTION REQUIRED:\n")
             f.write("1. Run gather_weather.py multiple times (at least 4-5 times)\n")
             f.write("2. Each run adds 25 weather records\n")
@@ -421,7 +419,7 @@ def plot_earnings_by_tuition_category(conn, filename='visualizations/bonus_earni
     data = cur.fetchall()
     
     if len(data) < 10:
-        print("⚠️ Not enough data for earnings visualization")
+        print(" Not enough data for earnings visualization")
         return
     
     tuitions = [row[0] for row in data]
@@ -514,7 +512,7 @@ def plot_state_completion_heatmap(conn, filename='visualizations/bonus_state_hea
     results = cur.fetchall()
     
     if len(results) < 3:
-        print("⚠️ Not enough states for heatmap visualization")
+        print(" Not enough states for heatmap visualization")
         return
     
     states = [row[0] for row in results]
@@ -586,7 +584,6 @@ def main():
     print("\n=== CURRENT DATABASE STATUS ===")
     get_table_counts(conn)
     
-    # ADDED: Diagnostic checks
     cur = conn.cursor()
     
     cur.execute("SELECT COUNT(*) FROM us_colleges")
@@ -602,14 +599,14 @@ def main():
     uni_count = cur.fetchone()[0]
     
     print("\n=== DATA COLLECTION STATUS ===")
-    print(f"✓ US Colleges: {college_count}/100 {'✓ COMPLETE' if college_count >= 100 else '⚠️ NEEDS MORE'}")
-    print(f"✓ College Financials: {financial_count}/100 {'✓ COMPLETE' if financial_count >= 100 else '⚠️ NEEDS MORE'}")
-    print(f"{'✓' if weather_count >= 100 else '⚠️'} Weather Records: {weather_count}/100 {'✓ COMPLETE' if weather_count >= 100 else '⚠️ NEEDS MORE - RUN gather_weather.py'}")
-    print(f"✓ Universities World: {uni_count}/100 {'✓ COMPLETE' if uni_count >= 100 else '⚠️ NEEDS MORE'}")
+    print(f"✓ US Colleges: {college_count}/100 {'✓ COMPLETE' if college_count >= 100 else ' NEEDS MORE'}")
+    print(f"✓ College Financials: {financial_count}/100 {'✓ COMPLETE' if financial_count >= 100 else ' NEEDS MORE'}")
+    print(f"{'✓' if weather_count >= 100 else ''} Weather Records: {weather_count}/100 {'✓ COMPLETE' if weather_count >= 100 else ' NEEDS MORE - RUN gather_weather.py'}")
+    print(f"✓ Universities World: {uni_count}/100 {'✓ COMPLETE' if uni_count >= 100 else ' NEEDS MORE'}")
     
     if college_count < 100 or financial_count < 100 or weather_count < 100 or uni_count < 100:
         print("\n" + "=" * 60)
-        print("⚠️ WARNING: INCOMPLETE DATA COLLECTION")
+        print(" WARNING: INCOMPLETE DATA COLLECTION")
         print("=" * 60)
         print("\nYou need to run the data gathering scripts more times:")
         if college_count < 100:
@@ -632,7 +629,7 @@ def main():
     if climate_stats:
         print(f"  ✓ Found {len(climate_stats)} colleges with climate data")
     else:
-        print(f"  ⚠️ NO CLIMATE DATA - Run gather_weather.py!")
+        print(f"  NO CLIMATE DATA - Run gather_weather.py!")
     
     print("Calculating country university counts...")
     country_counts = calculate_country_uni_counts(conn)
@@ -655,7 +652,7 @@ def main():
         print("Creating climate vs completion plot...")
         plot_climate_vs_completion(climate_stats)
     else:
-        print("⚠️ Skipping climate visualization - no data available")
+        print("Skipping climate visualization - no data available")
     
     if country_counts:
         print("Creating universities per country chart...")
@@ -682,7 +679,7 @@ def main():
     if climate_stats:
         print("    - climate_vs_completion.png ✓")
     else:
-        print("    - climate_vs_completion.png ⚠️ NOT CREATED (no weather data)")
+        print("    - climate_vs_completion.png NOT CREATED (no weather data)")
     print("    - universities_per_country.png")
     
     print("\nBONUS Visualizations (+30 points):")
@@ -693,7 +690,7 @@ def main():
     
     if weather_count < 100:
         print("\n" + "=" * 60)
-        print("⚠️ CRITICAL: MISSING WEATHER DATA")
+        print("CRITICAL: MISSING WEATHER DATA")
         print("=" * 60)
         print(f"\nYou have {weather_count} weather records but need 100+")
         print("\nTO FIX:")

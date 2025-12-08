@@ -9,8 +9,8 @@ DATABASE_NAME = "project.db"
 MAX_INSERT_PER_RUN = 25  
 
 
-END_DATE = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")  # 2 days ago
-START_DATE = (datetime.now() - timedelta(days=32)).strftime("%Y-%m-%d")  # 32 days ago
+END_DATE = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")  
+START_DATE = (datetime.now() - timedelta(days=32)).strftime("%Y-%m-%d")  
 
 
 def fetch_weather_for_college(lat, lon, start_date, end_date):
@@ -161,18 +161,15 @@ def main():
     FIXED: Better logic for progressive data collection
     """
     
-    # Connect to database
     conn = init_db(DATABASE_NAME)
     
     print("=" * 60)
     print("WEATHER DATA COLLECTION - Eve's Script")
     print("=" * 60)
     
-    # Show current status
     print("\n=== BEFORE DATA COLLECTION ===")
     get_table_counts(conn)
     
-    # Check if we have college data first
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM us_colleges WHERE lat IS NOT NULL AND lon IS NOT NULL")
     colleges_with_coords = cur.fetchone()[0]
@@ -189,7 +186,6 @@ def main():
     
     print(f"Found {colleges_with_coords} colleges with coordinates.")
     
-    # Check current weather data count
     cur.execute("SELECT COUNT(*) FROM daily_weather")
     current_weather_count = cur.fetchone()[0]
     
@@ -199,15 +195,13 @@ def main():
         conn.close()
         return
     
-    # FIXED: Try colleges without any weather first
     colleges = get_colleges_needing_weather(conn, limit=10)
     
     if not colleges:
-        # All colleges have some weather data, add more to existing ones
+       
         colleges_partial = get_colleges_with_partial_weather(conn, limit=10)
         if colleges_partial:
             print("All colleges have some weather. Adding more days...")
-            # Convert to same format (without the count)
             colleges = [(c[0], c[1], c[2], c[3], c[4]) for c in colleges_partial]
         else:
             print("All colleges have complete weather data!")
@@ -217,13 +211,10 @@ def main():
     
     print(f"Found {len(colleges)} colleges needing weather data.\n")
     
-    # Track how many records we've inserted this run
     total_inserted_this_run = 0
     
-    # Process each college
     for college_id, name, lat, lon, state in colleges:
         
-        # Check if we've hit the limit for this run
         if total_inserted_this_run >= MAX_INSERT_PER_RUN:
             print(f"\nReached {MAX_INSERT_PER_RUN} insertions limit for this run.")
             break
@@ -232,7 +223,6 @@ def main():
         print(f"  Location: ({lat}, {lon})")
         print(f"  Date range: {START_DATE} to {END_DATE}")
         
-        # Fetch weather data from API
         weather_data = fetch_weather_for_college(lat, lon, START_DATE, END_DATE)
         
         if not weather_data:
@@ -241,17 +231,14 @@ def main():
         
         print(f"  Received {len(weather_data)} days of weather data from API")
         
-        # Calculate how many we can still insert
         remaining_quota = MAX_INSERT_PER_RUN - total_inserted_this_run
         
-        # Store weather data
         inserted = store_weather(conn, college_id, weather_data[:remaining_quota])
         total_inserted_this_run += inserted
         
         print(f"  ✓ Inserted {inserted} new weather records")
         print(f"  Total this run: {total_inserted_this_run}/{MAX_INSERT_PER_RUN}\n")
     
-    # Final report
     print("=" * 60)
     print(f"COMPLETED: Inserted {total_inserted_this_run} weather records this run")
     print("=" * 60)
@@ -259,7 +246,6 @@ def main():
     print("\n=== AFTER DATA COLLECTION ===")
     get_table_counts(conn)
     
-    # Check overall progress
     cur.execute("SELECT COUNT(*) FROM daily_weather")
     total_weather = cur.fetchone()[0]
     
