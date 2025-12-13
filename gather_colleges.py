@@ -7,7 +7,7 @@ from database_setup import init_db, get_table_counts
 
 API_KEY = "u0vFVXgpsddy1j2vde7XyLz7W5TrbEEfaYHsswt6"
 BASE_URL = "https://api.data.gov/ed/collegescorecard/v1/schools"
-DATABASE_NAME = "project.db"
+DATABASE_NAME = "testing.db"
 MAX_INSERT_PER_RUN = 25 
 
 

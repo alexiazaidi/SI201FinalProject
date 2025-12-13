@@ -5,7 +5,7 @@ import sqlite3
 from database_setup import init_db, get_table_counts
 
 BASE_URL = "http://universities.hipolabs.com/search"
-DATABASE_NAME = "project.db"
+DATABASE_NAME = "testing.db"
 MAX_INSERT_PER_RUN = 25
 
 # Collecting from multiple countries to get diversity

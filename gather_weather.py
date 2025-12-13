@@ -5,7 +5,7 @@ from database_setup import init_db, get_table_counts
 
 
 BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
-DATABASE_NAME = "project.db"
+DATABASE_NAME = "testing.db"
 MAX_INSERT_PER_RUN = 25  
 
 
